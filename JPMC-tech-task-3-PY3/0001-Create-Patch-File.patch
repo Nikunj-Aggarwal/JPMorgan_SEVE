@@ -1,0 +1,224 @@
+From 1bc08e8e8f0998fa9520e7c6878bfbb181d719cb Mon Sep 17 00:00:00 2001
+From: Uday Yadav <dev117uday@gmail.com>
+Date: Fri, 10 Apr 2020 00:22:36 +0530
+Subject: [PATCH] Create Patch File
+
+---
+ 0001-Create-Patch-File.patch | 111 +++++++++++++++++++++++++++++++++++
+ src/App.css                  |   1 +
+ src/App.tsx                  |  27 ++++++++-
+ src/Graph.css                |   5 +-
+ 4 files changed, 139 insertions(+), 5 deletions(-)
+ create mode 100644 0001-Create-Patch-File.patch
+
+diff --git a/0001-Create-Patch-File.patch b/0001-Create-Patch-File.patch
+new file mode 100644
+index 0000000..b1d3b2c
+--- /dev/null
++++ b/0001-Create-Patch-File.patch
+@@ -0,0 +1,111 @@
++From 30653e3faf9b71e54ddb3ac1da44ebca1ed695c1 Mon Sep 17 00:00:00 2001
++From: Uday Yadav <dev117uday@gmail.com>
++Date: Thu, 9 Apr 2020 20:57:21 +0530
++Subject: [PATCH] Create Patch File
++
++---
++ src/DataManipulator.ts | 31 +++++++++++++++++++++----------
++ src/Graph.tsx          | 23 ++++++++++++++---------
++ 2 files changed, 35 insertions(+), 19 deletions(-)
++
++diff --git a/src/DataManipulator.ts b/src/DataManipulator.ts
++index f6b15ff..bffa923 100644
++--- a/src/DataManipulator.ts
+++++ b/src/DataManipulator.ts
++@@ -1,20 +1,31 @@
++ import { ServerRespond } from './DataStreamer';
++ 
++ export interface Row {
++-  stock: string,
++-  top_ask_price: number,
+++  price_abc: number,
+++  price_def: number,
+++  ratio: number,
++   timestamp: Date,
+++  upper_bound: number,
+++  lower_bound: number,
+++  trigger_alert: number | undefined,
++ }
++ 
++ 
++ export class DataManipulator {
++-  static generateRow(serverResponds: ServerRespond[]): Row[] {
++-    return serverResponds.map((el: any) => {
++-      return {
++-        stock: el.stock,
++-        top_ask_price: el.top_ask && el.top_ask.price || 0,
++-        timestamp: el.timestamp,
++-      };
++-    })
+++  static generateRow(serverResponds: ServerRespond[]): Row {
+++    const priceABC = (serverResponds[0].top_ask.price + serverResponds[0].top_bid.price) / 2;
+++    const priceDEF = (serverResponds[1].top_ask.price + serverResponds[1].top_bid.price) / 2;
+++    const ratio = priceABC / priceDEF;
+++    const upperBound = 1 + 0.01;
+++    const lowerBound = 1 - 0.01;
+++    return {
+++      price_abc: priceABC,
+++      price_def: priceDEF,
+++      ratio,
+++      timestamp: serverResponds[0].timestamp > serverResponds[1].timestamp ? serverResponds[0].timestamp : serverResponds[1].timestamp,
+++      upper_bound: upperBound,
+++      lower_bound: lowerBound,
+++      trigger_alert: (ratio > upperBound || ratio < lowerBound) ? ratio : undefined,
+++    }
++   }
++ }
++diff --git a/src/Graph.tsx b/src/Graph.tsx
++index 58fb997..ac5584b 100644
++--- a/src/Graph.tsx
+++++ b/src/Graph.tsx
++@@ -23,10 +23,13 @@ class Graph extends Component<IProps, {}> {
++     const elem = document.getElementsByTagName('perspective-viewer')[0] as unknown as PerspectiveViewerElement;
++ 
++     const schema = {
++-      stock: 'string',
++-      top_ask_price: 'float',
++-      top_bid_price: 'float',
+++      price_abc: 'float',
+++      price_def: 'float',
+++      ratio: 'float',
++       timestamp: 'date',
+++      upper_bound: 'float',
+++      lower_bound: 'float',
+++      trigger_alert: 'float'
++     };
++ 
++     if (window.perspective && window.perspective.worker()) {
++@@ -36,14 +39,16 @@ class Graph extends Component<IProps, {}> {
++       // Load the `table` in the `<perspective-viewer>` DOM reference.
++       elem.load(this.table);
++       elem.setAttribute('view', 'y_line');
++-      elem.setAttribute('column-pivots', '["stock"]');
++       elem.setAttribute('row-pivots', '["timestamp"]');
++-      elem.setAttribute('columns', '["top_ask_price"]');
+++      elem.setAttribute('columns', '["ratio","lower_bound","upper_bound","trigger_alert"]');
++       elem.setAttribute('aggregates', JSON.stringify({
++-        stock: 'distinctcount',
++-        top_ask_price: 'avg',
++-        top_bid_price: 'avg',
+++        price_abc: 'avg',
+++        price_def: 'avg',
+++        ratio: 'avg',
++         timestamp: 'distinct count',
+++        upper_bound: 'avg',
+++        lower_bound: 'avg',
+++        trigger_alert: 'avg',
++       }));
++     }
++   }
++@@ -51,7 +56,7 @@ class Graph extends Component<IProps, {}> {
++   componentDidUpdate() {
++     if (this.table) {
++       this.table.update(
++-        DataManipulator.generateRow(this.props.data),
+++        [DataManipulator.generateRow(this.props.data)],
++       );
++     }
++   }
++-- 
++2.17.1
++
+diff --git a/src/App.css b/src/App.css
+index 1a8747a..a474e40 100755
+--- a/src/App.css
++++ b/src/App.css
+@@ -37,6 +37,7 @@
+   min-height: 50vh;
+   width: 700px;
+   margin-bottom: 12px;
++  border: 20px solid red;
+ }
+ 
+ @keyframes App-logo-spin {
+diff --git a/src/App.tsx b/src/App.tsx
+index 274d20b..88708d4 100755
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -6,11 +6,13 @@ import './App.css';
+ interface IState {
+   data: ServerRespond[],
+   showGraph: boolean,
++
+ }
+ 
+ class App extends Component<{}, IState> {
+   constructor(props: {}) {
+     super(props);
++
+     this.state = {
+       data: [],
+       showGraph: false,
+@@ -19,10 +21,28 @@ class App extends Component<{}, IState> {
+ 
+   renderGraph() {
+     if (this.state.showGraph) {
+-      return (<Graph data={this.state.data}/>)
++
++      return (<Graph data={this.state.data} />)
++    }
++  }
++  renderGraphBorder() {
++    if (this.state.showGraph) {
++      // console.log(this.state.data)
++      let data_0 = this.state.data[0]
++      let data_1 = this.state.data[1]
++      let ratiox = (data_0.top_ask.price + data_0.top_bid.price) / 2
++      let ratioy = (data_1.top_ask.price + data_1.top_bid.price) / 2
++      let ratioxy = ratiox / ratioy
++      if (ratioxy > 1.01 || ratioxy < 0.99) {
++        return true
++      }
++      else {
++        return false
++      }
+     }
+   }
+ 
++
+   getDataFromServer() {
+     let x = 0;
+     const interval = setInterval(() => {
+@@ -40,14 +60,15 @@ class App extends Component<{}, IState> {
+   }
+ 
+   render() {
++
+     return (
+       <div className="App">
+         <header className="App-header">
+           Bank Merge & Co Task 3
+         </header>
+         <div className="App-content">
+-          <button className="btn btn-primary Stream-button" onClick={() => {this.getDataFromServer()}}>Start Streaming Data</button>
+-          <div className="Graph">
++          <button className="btn btn-primary Stream-button" onClick={() => { this.getDataFromServer() }}>Start Streaming Data</button>
++          <div className="Graph" style={this.renderGraphBorder() ? { border: '10px solid red' } : { border: '10px solid green' }}>
+             {this.renderGraph()}
+           </div>
+         </div>
+diff --git a/src/Graph.css b/src/Graph.css
+index c77c560..399dfd3 100644
+--- a/src/Graph.css
++++ b/src/Graph.css
+@@ -1,4 +1,5 @@
+ perspective-viewer {
+   height: 50vh;
+-  width: 700px;
+-}
+\ No newline at end of file
++  width: 600px;
++}
++
+-- 
+2.17.1
+
